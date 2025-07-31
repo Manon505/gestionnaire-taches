@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager-Eisenhower</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Gestionnaire de Tâches</h1>
+            <div class="header-buttons">
+                <button class="legend-btn" id="legendBtn" title="Voir la légende Eisenhower">
+                    i
+                </button>
+                <button class="settings-btn" id="settingsBtn" title="Configurer les questions">
+                    ⚙
+                </button>
+                <button class="add-task-btn" id="addTaskModalBtn" title="Créer une nouvelle tâche">
+                    +
+                </button>
+            </div>
+        </div>
+        
+        <div id="statusMessage"></div>
+
+        <div class="kanban-board">
+            <!-- Colonne À Faire -->
+            <div class="kanban-column column-todo" data-status="todo">
+                <div class="column-header">
+                    📝 À Faire
+                    <span class="task-count" id="todoCount">0</span>
+                </div>
+                <div class="tasks-container" id="todoTasks">
+                    <div class="empty-column">Aucune tâche à faire</div>
+                </div>
+            </div>
+
+            <!-- Colonne En Cours -->
+            <div class="kanban-column column-inprogress" data-status="inprogress">
+                <div class="column-header">
+                    ⚡ En Cours
+                    <span class="task-count" id="inprogressCount">0</span>
+                </div>
+                <div class="tasks-container" id="inprogressTasks">
+                    <div class="empty-column">Aucune tâche en cours</div>
+                </div>
+            </div>
+
+            <!-- Colonne Terminées -->
+            <div class="kanban-column column-done" data-status="done">
+                <div class="column-header">
+                    ✅ Terminées
+                    <span class="task-count" id="doneCount">0</span>
+                </div>
+                <div class="tasks-container" id="doneTasks">
+                    <div class="empty-column">Aucune tâche terminée</div>
+                </div>
+            </div>	
+        </div>
+        
+        <div class="drag-instructions">
+            💡 <strong>Astuce :</strong> Vous pouvez déplacer les tâches en les glissant d'une colonne à l'autre avec la souris !
+        </div>	
+    </div>
+
+    <!-- Modal pour créer une tâche -->
+    <div class="modal" id="taskModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">✨ Créer une nouvelle tâche</h2>
+                <button class="close-btn" id="closeModalBtn">×</button>
+            </div>
+            
+            <form class="task-form" id="taskForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="title">Titre de la tâche</label>
+                        <input type="text" id="title" name="title" required placeholder="Entrez le titre de la tâche">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dueDate">Échéance finale</label>
+                        <input type="date" id="dueDate" name="dueDate" placeholder="Date limite de fin">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="estimatedDuration">Durée estimée (en heures)</label>
+                        <input type="number" id="estimatedDuration" name="estimatedDuration" min="0.5" step="0.5" placeholder="Ex: 2.5">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="startDeadline">Date limite pour commencer</label>
+                        <input type="date" id="startDeadline" name="startDeadline" readonly class="calculated-field">
+                        <small style="color: #666; font-size: 0.8em;">Calculée automatiquement</small>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" placeholder="Description détaillée de la tâche"></textarea>
+                </div>
+
+                <!-- Section d'évaluation Eisenhower obligatoire -->
+                <div class="evaluation-section" id="evaluationSection">
+                    <h3>🎯 Évaluation Eisenhower (obligatoire)</h3>
+                    
+                    <div class="questions-grid" id="questionsGrid">
+                        <!-- Les questions seront générées dynamiquement -->
+                    </div>
+
+                    <!-- Résultat de l'évaluation -->
+                    <div class="evaluation-result hidden" id="evaluationResult">
+                        <div class="result-quadrant"></div>
+                        <div class="result-description"></div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancelBtn">Annuler</button>
+                <button type="submit" class="btn" id="addTaskBtn" disabled form="taskForm">+ Créer la tâche</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour configurer les questions -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">⚙️ Configuration du Questionnaire Eisenhower</h2>
+                <button class="close-btn" id="closeSettingsBtn">×</button>
+            </div>
+            
+            <div class="question-config-section">
+                <h3>Configuration des Questions</h3>
+                
+                <div class="minimum-questions-warning">
+                    <span class="icon">⚠️</span>
+                    <span>Attention : Vous devez conserver au minimum <strong>3 questions</strong> dans chaque catégorie pour garantir une évaluation précise.</span>
+                </div>
+                
+                <div class="question-config-category">
+                    <h4>📈 Questions sur l'IMPORTANCE</h4>
+                    <div id="importanceQuestionsConfig"></div>
+                    <button type="button" class="btn-small btn-add" id="addImportanceQuestion">+ Ajouter une question</button>
+                </div>
+                
+                <div class="question-config-category">
+                    <h4>⚡ Questions sur l'URGENCE</h4>
+                    <div id="urgencyQuestionsConfig"></div>
+                    <button type="button" class="btn-small btn-add" id="addUrgencyQuestion">+ Ajouter une question</button>
+                </div>
+                
+                <div class="config-actions">
+                    <button type="button" class="btn btn-danger" id="resetQuestionsBtn">🔄 Restaurer par défaut</button>
+                    <button type="button" class="btn btn-secondary" id="cancelSettingsBtn">Annuler</button>
+                    <button type="button" class="btn" id="saveSettingsBtn">💾 Sauvegarder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour la légende Eisenhower -->
+    <div class="modal" id="legendModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">📊 Légende des Évaluations Eisenhower</h2>
+                <button class="close-btn" id="closeLegendBtn">×</button>
+            </div>
+            
+            <div class="eisenhower-legend">
+                <div class="legend-grid">
+                    <div class="legend-item">
+                        <div class="legend-badge urgent-important">À TRAITER</div>
+                        <div class="legend-description">Urgent, important</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-badge important-not-urgent">À PLANIFIER</div>
+                        <div class="legend-description">Important, pas urgent</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-badge urgent-not-important">À DÉLÉGUER</div>
+                        <div class="legend-description">Urgent, pas important</div>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-badge not-urgent-not-important">À ABANDONNER</div>
+                        <div class="legend-description">Pas urgent, pas important</div>
+                    </div>
+                </div>
+                
+                <div class="legend-explanations">
+                    <h3>🎯 Principe de la Matrice d'Eisenhower</h3>
+                    <p>Cette méthode vous aide à prioriser vos tâches selon deux critères :</p>
+                    <ul>
+                        <li><strong>Importance :</strong> La tâche contribue-t-elle à vos objectifs ?</li>
+                        <li><strong>Urgence :</strong> La tâche nécessite-t-elle une action immédiate ?</li>
+                    </ul>
+                    <p><strong>Nouveauté :</strong> L'urgence est maintenant calculée en combinant vos réponses au questionnaire avec les échéances que vous définissez.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour éditer une tâche -->
+    <div class="modal" id="editTaskModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">✏️ Modifier la tâche</h2>
+                <button class="close-btn" id="closeEditModalBtn">×</button>
+            </div>
+            
+            <form class="task-form" id="editTaskForm">
+                <input type="hidden" id="editTaskId" name="taskId">
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editTitle">Titre de la tâche</label>
+                        <input type="text" id="editTitle" name="title" required placeholder="Entrez le titre de la tâche">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editDueDate">Échéance finale</label>
+                        <input type="date" id="editDueDate" name="dueDate">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editEstimatedDuration">Durée estimée (en heures)</label>
+                        <input type="number" id="editEstimatedDuration" name="estimatedDuration" min="0.5" step="0.5">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editStartDeadline">Date limite pour commencer</label>
+                        <input type="date" id="editStartDeadline" name="startDeadline" readonly class="calculated-field">
+                        <small style="color: #666; font-size: 0.8em;">Calculée automatiquement</small>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editDescription">Description</label>
+                    <textarea id="editDescription" name="description" placeholder="Description détaillée de la tâche"></textarea>
+                </div>
+
+                <!-- Section d'évaluation Eisenhower pour modification -->
+                <div class="evaluation-section" id="editEvaluationSection">
+                    <h3>🎯 Réévaluation Eisenhower (optionnelle)</h3>
+                    <p class="evaluation-note">Vous pouvez modifier l'évaluation de cette tâche si nécessaire.</p>
+                    
+                    <div class="questions-grid" id="editQuestionsGrid">
+                        <!-- Les questions seront générées dynamiquement -->
+                    </div>
+
+                    <!-- Résultat de l'évaluation -->
+                    <div class="evaluation-result hidden" id="editEvaluationResult">
+                        <div class="result-quadrant"></div>
+                        <div class="result-description"></div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancelEditBtn">Annuler</button>
+                <button type="submit" class="btn" id="saveTaskBtn" form="editTaskForm">💾 Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
