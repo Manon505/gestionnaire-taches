@@ -465,6 +465,13 @@ def get_task_stats():
 
 import os
 
+import os
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)  # Important pour les requêtes cross-origin
+
 if __name__ == '__main__':
     # Initialiser et migrer la base de données au démarrage
     print("🚀 Démarrage du serveur...")
@@ -476,4 +483,4 @@ if __name__ == '__main__':
     print(f"🌐 Serveur disponible sur http://0.0.0.0:{port}")
     print(f"📊 API de statistiques: http://0.0.0.0:{port}/api/tasks/stats")
     # Lancer l'application avec host 0.0.0.0 et port dynamique
-    app.run(debug=True, host='0.0.0.0', port=port)
+    app.run(debug=False, host='0.0.0.0', port=port)
