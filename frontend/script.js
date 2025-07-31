@@ -1,7 +1,7 @@
 class TaskManager {
 	constructor() {
 		this.tasks = [];
-		this.apiUrl = 'http://localhost:5000/api/tasks';
+		this.apiUrl = 'https://votre-app.onrender.com/api/tasks';
 		this.draggedTask = null;
 		this.offlineMode = false;
 		this.hasLoadedBefore = false;
