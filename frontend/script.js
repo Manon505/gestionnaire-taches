@@ -41,7 +41,7 @@ class TaskManager {
 		// Si c'est un déploiement Render, utiliser l'URL backend
 		if (hostname.includes('vercel.app') || hostname.includes('netlify.app')) {
 			// Frontend déployé séparément, pointer vers le backend Render
-			return 'https://gestionnaire-taches.onrender.com/api/tasks';
+			return 'https://gestionnaire-taches.onrender.com';
 		}
 		
 		// Si tout est déployé ensemble sur Render
