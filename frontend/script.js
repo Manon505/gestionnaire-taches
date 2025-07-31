@@ -1,7 +1,8 @@
 class TaskManager {
 	constructor() {
 		this.tasks = [];
-		this.apiUrl = 'https://votre-app.onrender.com/api/tasks';
+		// 🔧 MODIFICATION PRINCIPALE : Détection automatique de l'environnement
+		this.apiUrl = this.getApiUrl();
 		this.draggedTask = null;
 		this.offlineMode = false;
 		this.hasLoadedBefore = false;
@@ -25,13 +26,317 @@ class TaskManager {
 		this.init();
 	}
 
-	init() {
+	// 🆕 NOUVELLE MÉTHODE : Détection automatique de l'URL API
+	getApiUrl() {
+		// Si on est en développement local
+		if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+			return 'http://localhost:5000/api/tasks';
+		}
+		
+		// Si on est en production, construire l'URL dynamiquement
+		// Remplacez 'votre-app-name' par le nom réel de votre app Render
+		const protocol = window.location.protocol; // https: ou http:
+		const hostname = window.location.hostname;
+		
+		// Si c'est un déploiement Render, utiliser l'URL backend
+		if (hostname.includes('vercel.app') || hostname.includes('netlify.app')) {
+			// Frontend déployé séparément, pointer vers le backend Render
+			return 'https://REMPLACEZ-PAR-NOM-REEL-APP.onrender.com/api/tasks';
+		}
+		
+		// Si tout est déployé ensemble sur Render
+		return `${protocol}//${hostname}/api/tasks`;
+	}
+
+	// 🆕 NOUVELLE MÉTHODE : Test de connectivité API au démarrage
+	async testApiConnection() {
+		try {
+			console.log('Test de connexion API vers:', this.apiUrl);
+			const response = await fetch(this.apiUrl, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				// Timeout de 10 secondes
+				signal: AbortSignal.timeout(10000)
+			});
+
+			if (response.ok) {
+				console.log('✅ Connexion API réussie');
+				return true;
+			} else {
+				console.warn('⚠️ API accessible mais erreur:', response.status);
+				return false;
+			}
+		} catch (error) {
+			console.error('❌ Échec de connexion API:', error.message);
+			return false;
+		}
+	}
+
+	async init() {
 		this.bindEvents();
 		this.setupDragAndDrop();
 		this.setupModal();
 		this.generateQuestions();
+		
+		// Tester la connexion avant de charger les tâches
+		const apiConnected = await this.testApiConnection();
+		if (!apiConnected) {
+			this.showStatus('Mode hors ligne - Serveur non accessible', 'warning');
+			this.offlineMode = true;
+		}
+		
 		this.loadTasks();
 	}
+
+	// 🔧 MODIFICATION : Amélioration de la gestion d'erreur dans loadTasks
+	async loadTasks() {
+		// Si on sait déjà qu'on est hors ligne, utiliser les données de démo directement
+		if (this.offlineMode) {
+			this.loadDemoTasks();
+			return;
+		}
+
+		try {
+			console.log('Chargement des tâches depuis:', this.apiUrl);
+			
+			const response = await fetch(this.apiUrl, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				// Timeout de 15 secondes
+				signal: AbortSignal.timeout(15000)
+			});
+
+			if (!response.ok) {
+				throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`);
+			}
+
+			const data = await response.json();
+			
+			if (data.success) {
+				this.tasks = data.tasks || [];
+				
+				this.tasks.forEach(task => {
+					if (!task.status) {
+						if (task.completed) {
+							task.status = 'done';
+						} else {
+							task.status = 'todo';
+						}
+					}
+				});
+				
+				console.log('✅ Tâches chargées depuis l\'API:', this.tasks.length);
+				this.renderTasks();
+				
+				if (this.tasks.length > 0 && !this.hasLoadedBefore) {
+					this.showStatus(`${this.tasks.length} tâche(s) chargée(s)`, 'success');
+					this.hasLoadedBefore = true;
+				}
+
+				// Marquer comme connecté si le chargement réussit
+				this.offlineMode = false;
+			} else {
+				console.error('Erreur API:', data.error);
+				this.showStatus('Erreur lors du chargement: ' + (data.error || 'Erreur inconnue'), 'error');
+				this.loadDemoTasks();
+			}
+		} catch (error) {
+			console.error('❌ Erreur lors du chargement des tâches:', error);
+			
+			// Messages d'erreur plus informatifs
+			let errorMessage = 'Impossible de se connecter à l\'API.';
+			if (error.name === 'TimeoutError') {
+				errorMessage = 'Délai d\'attente dépassé. Serveur trop lent ou indisponible.';
+			} else if (error.message.includes('Failed to fetch')) {
+				errorMessage = 'Erreur de réseau. Vérifiez votre connexion internet.';
+			} else if (error.message.includes('CORS')) {
+				errorMessage = 'Erreur CORS. Configuration serveur requise.';
+			}
+			
+			this.showStatus(errorMessage + ' Mode démonstration activé.', 'warning');
+			this.offlineMode = true;
+			this.loadDemoTasks();
+		}
+	}
+
+	// 🆕 NOUVELLE MÉTHODE : Chargement des données de démonstration
+	loadDemoTasks() {
+		this.tasks = [
+			{
+				id: -1,
+				title: "Présentation client importante",
+				description: "Préparer la présentation pour le client majeur",
+				dueDate: "2025-08-05",
+				completed: false,
+				status: 'todo',
+				createdAt: new Date().toISOString(),
+				eisenhowerEvaluation: {
+					isImportant: true,
+					isUrgent: true,
+					importanceScore: 0.8,
+					urgencyScore: 0.9
+				}
+			},
+			{
+				id: -2,
+				title: "Formation équipe",
+				description: "Organiser la formation pour l'équipe",
+				dueDate: "2025-09-15",
+				completed: false,
+				status: 'inprogress',
+				createdAt: new Date().toISOString(),
+				eisenhowerEvaluation: {
+					isImportant: true,
+					isUrgent: false,
+					importanceScore: 0.7,
+					urgencyScore: 0.3
+				}
+			},
+			{
+				id: -3,
+				title: "Répondre aux emails",
+				description: "Traiter la boîte de réception",
+				dueDate: "2025-08-01",
+				completed: false,
+				status: 'todo',
+				createdAt: new Date().toISOString(),
+				eisenhowerEvaluation: {
+					isImportant: false,
+					isUrgent: true,
+					importanceScore: 0.2,
+					urgencyScore: 0.8
+				}
+			}
+		];
+		this.renderTasks();
+	}
+
+	// 🔧 MODIFICATION : Amélioration de la gestion d'erreur dans addTask
+	async addTask() {
+		const form = document.getElementById('taskForm');
+		const addBtn = document.getElementById('addTaskBtn');
+		const formData = new FormData(form);
+		
+		const taskData = {
+			title: formData.get('title'),
+			description: formData.get('description'),
+			dueDate: formData.get('dueDate'),
+			priority: 'moyenne',
+			estimatedDuration: formData.get('estimatedDuration'),
+			startDeadline: document.getElementById('startDeadline').value
+		};
+
+		// Ajouter les données d'évaluation
+		if (this.currentEvaluation) {
+			taskData.eisenhowerEvaluation = this.currentEvaluation;
+		}
+
+		addBtn.disabled = true;
+		addBtn.textContent = '⏳ Création...';
+
+		// Mode hors ligne
+		if (this.offlineMode) {
+			const newTask = {
+				...taskData,
+				id: Date.now(), // ID temporaire
+				completed: false,
+				status: 'todo',
+				createdAt: new Date().toISOString()
+			};
+			
+			this.tasks.push(newTask);
+			this.renderTasks();
+			
+			document.getElementById('taskModal').classList.remove('show');
+			document.body.style.overflow = 'auto';
+			form.reset();
+			this.resetEvaluation();
+			
+			this.showStatus('Tâche créée en mode hors ligne', 'warning');
+			addBtn.disabled = true;
+			addBtn.textContent = '➕ Créer la tâche';
+			return;
+		}
+
+		try {
+			const response = await fetch(this.apiUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(taskData),
+				signal: AbortSignal.timeout(10000)
+			});
+
+			if (!response.ok) {
+				throw new Error(`Erreur HTTP: ${response.status} - ${response.statusText}`);
+			}
+
+			const data = await response.json();
+			
+			if (data.success) {
+				document.getElementById('taskModal').classList.remove('show');
+				document.body.style.overflow = 'auto';
+				
+				form.reset();
+				this.resetEvaluation();
+				
+				this.showStatus('Tâche créée avec succès !', 'success');
+				await this.loadTasks();
+				
+				setTimeout(() => {
+					const newTask = document.querySelector(`[data-task-id="${data.task.id}"]`);
+					if (newTask) {
+						newTask.classList.add('new-task');
+						setTimeout(() => {
+							newTask.classList.remove('new-task');
+						}, 300);
+					}
+				}, 100);
+
+			} else {
+				this.showStatus('Erreur lors de la création: ' + (data.error || 'Erreur inconnue'), 'error');
+			}
+		} catch (error) {
+			console.error('Erreur lors de la création de la tâche:', error);
+			
+			let errorMessage = 'Erreur de connexion lors de la création.';
+			if (error.name === 'TimeoutError') {
+				errorMessage = 'Délai d\'attente dépassé lors de la création.';
+			}
+			
+			this.showStatus(errorMessage, 'error');
+		} finally {
+			addBtn.disabled = true;
+			addBtn.textContent = '➕ Créer la tâche';
+		}
+	}
+
+	// 🆕 NOUVELLE MÉTHODE : Vérification périodique de la reconnexion
+	startConnectionCheck() {
+		if (this.connectionCheckInterval) {
+			clearInterval(this.connectionCheckInterval);
+		}
+
+		this.connectionCheckInterval = setInterval(async () => {
+			if (this.offlineMode) {
+				const isConnected = await this.testApiConnection();
+				if (isConnected) {
+					this.offlineMode = false;
+					this.showStatus('Connexion rétablie !', 'success');
+					this.loadTasks();
+					clearInterval(this.connectionCheckInterval);
+				}
+			}
+		}, 30000); // Vérifier toutes les 30 secondes
+	}
+
+	// Le reste du code reste identique...
+	// [Copiez tout le reste de votre code existant ici]
 
 	calculateStartDeadline(dueDate, estimatedDuration) {
 		if (!dueDate || !estimatedDuration) {
@@ -676,75 +981,6 @@ class TaskManager {
 		}, 5000);
 	}
 
-	async addTask() {
-		const form = document.getElementById('taskForm');
-		const addBtn = document.getElementById('addTaskBtn');
-		const formData = new FormData(form);
-		
-		const taskData = {
-			title: formData.get('title'),
-			description: formData.get('description'),
-			dueDate: formData.get('dueDate'),
-			priority: 'moyenne',
-			estimatedDuration: formData.get('estimatedDuration'),
-			startDeadline: document.getElementById('startDeadline').value
-		};
-
-		// Ajouter les données d'évaluation
-		if (this.currentEvaluation) {
-			taskData.eisenhowerEvaluation = this.currentEvaluation;
-		}
-
-		addBtn.disabled = true;
-		addBtn.textContent = '⏳ Création...';
-
-		try {
-			const response = await fetch(this.apiUrl, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(taskData)
-			});
-
-			if (!response.ok) {
-				throw new Error(`Erreur HTTP: ${response.status}`);
-			}
-
-			const data = await response.json();
-			
-			if (data.success) {
-				document.getElementById('taskModal').classList.remove('show');
-				document.body.style.overflow = 'auto';
-				
-				form.reset();
-				this.resetEvaluation();
-				
-				this.showStatus('Tâche créée avec succès !', 'success');
-				await this.loadTasks();
-				
-				setTimeout(() => {
-					const newTask = document.querySelector(`[data-task-id="${data.task.id}"]`);
-					if (newTask) {
-						newTask.classList.add('new-task');
-						setTimeout(() => {
-							newTask.classList.remove('new-task');
-						}, 300);
-					}
-				}, 100);
-
-			} else {
-				this.showStatus('Erreur lors de la création: ' + (data.error || 'Erreur inconnue'), 'error');
-			}
-		} catch (error) {
-			console.error('Erreur lors de la création de la tâche:', error);
-			this.showStatus('Erreur de connexion. Vérifiez que le serveur est démarré.', 'error');
-		} finally {
-			addBtn.disabled = true;
-			addBtn.textContent = '➕ Créer la tâche';
-		}
-	}
-
 	async updateTaskStatus(id, newStatus) {
 		try {
 			const task = this.tasks.find(t => t.id === id);
@@ -774,7 +1010,6 @@ class TaskManager {
 			} else {
 				updateData.completed = false;
 				updateData.status = newStatus;
-			
 			}
 
 			console.log('Données envoyées:', updateData);
@@ -784,7 +1019,8 @@ class TaskManager {
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify(updateData)
+				body: JSON.stringify(updateData),
+				signal: AbortSignal.timeout(10000)
 			});
 
 			if (!response.ok) {
@@ -809,7 +1045,13 @@ class TaskManager {
 			}
 		} catch (error) {
 			console.error('Erreur lors de la mise à jour de la tâche:', error);
-			this.showStatus('Erreur de connexion lors de la mise à jour: ' + error.message, 'error');
+			
+			let errorMessage = 'Erreur de connexion lors de la mise à jour';
+			if (error.name === 'TimeoutError') {
+				errorMessage = 'Délai d\'attente dépassé lors de la mise à jour';
+			}
+			
+			this.showStatus(errorMessage + ': ' + error.message, 'error');
 		}
 	}
 
@@ -818,12 +1060,20 @@ class TaskManager {
 			return;
 		}
 
+		if (this.offlineMode) {
+			this.tasks = this.tasks.filter(t => t.id !== id);
+			this.renderTasks();
+			this.showStatus('Tâche supprimée (mode hors ligne)', 'warning');
+			return;
+		}
+
 		try {
 			const response = await fetch(`${this.apiUrl}/${id}`, {
 				method: 'DELETE',
 				headers: {
 					'Content-Type': 'application/json',
-				}
+				},
+				signal: AbortSignal.timeout(10000)
 			});
 
 			if (!response.ok) {
@@ -840,7 +1090,13 @@ class TaskManager {
 			}
 		} catch (error) {
 			console.error('Erreur lors de la suppression de la tâche:', error);
-			this.showStatus('Erreur de connexion lors de la suppression', 'error');
+			
+			let errorMessage = 'Erreur de connexion lors de la suppression';
+			if (error.name === 'TimeoutError') {
+				errorMessage = 'Délai d\'attente dépassé lors de la suppression';
+			}
+			
+			this.showStatus(errorMessage, 'error');
 		}
 	}
 
@@ -913,70 +1169,6 @@ class TaskManager {
 		}
 	}
 
-	calculateEditEvaluationResult() {
-		 const importanceAnswers = Object.values(this.editEvaluationAnswers.importance);
-		const urgencyAnswers = Object.values(this.editEvaluationAnswers.urgency);
-		
-		const minAnswers = Math.min(3, this.questionConfig.importance.length, this.questionConfig.urgency.length);
-		if (importanceAnswers.length < minAnswers || urgencyAnswers.length < minAnswers) {
-			return;
-		}
-		
-		// Score d'importance basé sur les réponses
-		const importanceScore = importanceAnswers.filter(answer => answer === true).length / importanceAnswers.length;
-		
-		// Score d'urgence basé sur les réponses (inversé car les nouvelles questions portent sur la flexibilité)
-		const questionUrgencyScore = 1 - (urgencyAnswers.filter(answer => answer === true).length / urgencyAnswers.length);
-		
-		// Score d'urgence temporelle basé sur les échéances
-		const startDeadline = document.getElementById('editStartDeadline').value;
-		const timeUrgencyScore = this.calculateTimeBasedUrgency(startDeadline);
-		
-		// Combinaison des deux scores d'urgence (60% temporel, 40% questionnaire)
-		const finalUrgencyScore = (timeUrgencyScore * 0.6) + (questionUrgencyScore * 0.4);
-		
-		const isImportant = importanceScore >= 0.6;
-		const isUrgent = finalUrgencyScore >= 0.6;
-		
-		let quadrant, description, quadrantClass;
-		
-		if (isUrgent && isImportant) {
-			quadrant = '🚨 À TRAITER (Urgent + Important)';
-			description = 'Cette tâche nécessite votre attention immédiate. Planifiez-la en priorité absolue.';
-			quadrantClass = 'urgent-important';
-		} else if (isImportant && !isUrgent) {
-			quadrant = '📋 À PLANIFIER (Important, pas urgent)';
-			description = 'Cette tâche est importante pour vos objectifs. Programmez du temps dédié pour la réaliser.';
-			quadrantClass = 'important-not-urgent';
-		} else if (isUrgent && !isImportant) {
-			quadrant = '👥 À DÉLÉGUER (Urgent, pas important)';
-			description = 'Cette tâche est pressante mais pas cruciale. Déléguez-la si possible ou traitez-la rapidement.';
-			quadrantClass = 'urgent-not-important';
-		} else {
-			quadrant = '🗑️ À ABANDONNER (Ni urgent, ni important)';
-			description = 'Cette tâche n\'est pas prioritaire. Considérez l\'éliminer ou la reporter indéfiniment.';
-			quadrantClass = 'not-urgent-not-important';
-		}
-		
-		// Afficher le résultat avec indicateur d'urgence
-		const resultDiv = document.getElementById('editEvaluationResult');
-		const urgencyLabel = this.getUrgencyLabel(finalUrgencyScore);
-		
-		resultDiv.querySelector('.result-quadrant').innerHTML = `${quadrant} <span class="urgency-indicator ${urgencyLabel.class}">Urgence: ${urgencyLabel.text}</span>`;
-		resultDiv.querySelector('.result-description').textContent = description;
-		resultDiv.classList.remove('hidden');
-		
-		this.editCurrentEvaluation = {
-			isImportant,
-			isUrgent,
-			quadrant: quadrantClass,
-			importanceScore,
-			urgencyScore: finalUrgencyScore,
-			timeUrgencyScore,
-			questionUrgencyScore
-		};
-	}
-
 	resetEditForm() {
 		document.getElementById('editTaskForm').reset();
 		this.resetEditEvaluation();
@@ -1017,13 +1209,33 @@ class TaskManager {
 		saveBtn.disabled = true;
 		saveBtn.textContent = '⏳ Sauvegarde...';
 
+		// Mode hors ligne
+		if (this.offlineMode) {
+			const taskIndex = this.tasks.findIndex(t => t.id === this.editingTaskId);
+			if (taskIndex !== -1) {
+				this.tasks[taskIndex] = { ...this.tasks[taskIndex], ...taskData };
+				this.renderTasks();
+				
+				document.getElementById('editTaskModal').classList.remove('show');
+				document.body.style.overflow = 'auto';
+				this.resetEditForm();
+				
+				this.showStatus('Tâche modifiée en mode hors ligne', 'warning');
+			}
+			
+			saveBtn.disabled = false;
+			saveBtn.textContent = '💾 Sauvegarder';
+			return;
+		}
+
 		try {
 			const response = await fetch(`${this.apiUrl}/${this.editingTaskId}`, {
 				method: 'PUT',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify(taskData)
+				body: JSON.stringify(taskData),
+				signal: AbortSignal.timeout(10000)
 			});
 
 			if (!response.ok) {
@@ -1055,7 +1267,13 @@ class TaskManager {
 			}
 		} catch (error) {
 			console.error('Erreur lors de la modification de la tâche:', error);
-			this.showStatus('Erreur de connexion lors de la modification.', 'error');
+			
+			let errorMessage = 'Erreur de connexion lors de la modification';
+			if (error.name === 'TimeoutError') {
+				errorMessage = 'Délai d\'attente dépassé lors de la modification';
+			}
+			
+			this.showStatus(errorMessage, 'error');
 		} finally {
 			saveBtn.disabled = false;
 			saveBtn.textContent = '💾 Sauvegarder';
@@ -1259,135 +1477,6 @@ class TaskManager {
 		const div = document.createElement('div');
 		div.textContent = text;
 		return div.innerHTML;
-	}
-
-	async loadTasks() {
-		try {
-			const response = await fetch(this.apiUrl, {
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json',
-				}
-			});
-
-			if (!response.ok) {
-				throw new Error(`Erreur HTTP: ${response.status}`);
-			}
-
-			const data = await response.json();
-			
-			if (data.success) {
-				this.tasks = data.tasks || [];
-				
-				this.tasks.forEach(task => {
-					if (!task.status) {
-						if (task.completed) {
-							task.status = 'done';
-						} else {
-							task.status = 'todo';
-						}
-					}
-				});
-				
-				console.log('Tâches chargées depuis l\'API:', this.tasks);
-				this.renderTasks();
-				
-				if (this.tasks.length > 0 && !this.hasLoadedBefore) {
-					this.showStatus(`${this.tasks.length} tâche(s) chargée(s)`, 'success');
-					this.hasLoadedBefore = true;
-				}
-			} else {
-				console.error('Erreur API:', data.error);
-				this.showStatus('Erreur lors du chargement: ' + (data.error || 'Erreur inconnue'), 'error');
-				this.tasks = [];
-				this.renderTasks();
-			}
-		} catch (error) {
-			console.error('Erreur lors du chargement des tâches:', error);
-			this.showStatus('Impossible de se connecter à l\'API. Mode démonstration activé.', 'warning');
-			
-			// Données de démonstration en mode hors ligne
-			this.tasks = [
-				{
-					id: -1,
-					title: "Présentation client importante",
-					description: "Préparer la présentation pour le client majeur",
-					dueDate: "2025-08-05",
-					completed: false,
-					status: 'todo',
-					createdAt: new Date().toISOString(),
-					eisenhowerEvaluation: {
-						isImportant: true,
-						isUrgent: true,
-						importanceScore: 0.8,
-						urgencyScore: 0.9
-					}
-				},
-				{
-					id: -2,
-					title: "Formation équipe",
-					description: "Organiser la formation pour l'équipe",
-					dueDate: "2025-09-15",
-					completed: false,
-					status: 'inprogress',
-					createdAt: new Date().toISOString(),
-					eisenhowerEvaluation: {
-						isImportant: true,
-						isUrgent: false,
-						importanceScore: 0.7,
-						urgencyScore: 0.3
-					}
-				},
-				{
-					id: -3,
-					title: "Répondre aux emails",
-					description: "Traiter la boîte de réception",
-					dueDate: "2025-08-01",
-					completed: false,
-					status: 'todo',
-					createdAt: new Date().toISOString(),
-					eisenhowerEvaluation: {
-						isImportant: false,
-						isUrgent: true,
-						importanceScore: 0.2,
-						urgencyScore: 0.8
-					}
-				},
-				{
-					id: -4,
-					title: "Organiser bureau",
-					description: "Ranger et organiser l'espace de travail",
-					dueDate: "2025-10-01",
-					completed: false,
-					status: 'todo',
-					createdAt: new Date().toISOString(),
-					eisenhowerEvaluation: {
-						isImportant: false,
-						isUrgent: false,
-						importanceScore: 0.1,
-						urgencyScore: 0.2
-					}
-				},
-				{
-					id: -5,
-					title: "Tâche terminée exemple",
-					description: "Cette tâche montre le statut terminé",
-					dueDate: null,
-					completed: true,
-					status: 'done',
-					createdAt: new Date().toISOString(),
-					eisenhowerEvaluation: {
-						isImportant: true,
-						isUrgent: false,
-						importanceScore: 0.8,
-						urgencyScore: 0.2
-					}
-				}
-			];
-			this.renderTasks();
-			
-			this.offlineMode = true;
-		}
 	}
 }
 
